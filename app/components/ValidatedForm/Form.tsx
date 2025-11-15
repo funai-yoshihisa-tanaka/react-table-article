@@ -1,14 +1,14 @@
 import React from 'react'
-import { type FetcherWithComponents, type HTMLFormMethod } from 'react-router'
+import { useSubmit, type FetcherWithComponents, type HTMLFormMethod } from 'react-router'
 
 type DidPassData = Record<string, boolean>
 
 type FormDispatchContextType = {
   didPassData: React.Dispatch<React.SetStateAction<DidPassData>>
-  event: ()=>void
+  cancelPendingSubmit: ()=>void
 }
 
-const FormDispatchContext = React.createContext<FormDispatchContextType>({didPassData: ()=>{}, event: ()=>{}});
+const FormDispatchContext = React.createContext<FormDispatchContextType>({didPassData: ()=>{}, cancelPendingSubmit: ()=>{}});
 const FormStateContext = React.createContext<boolean>(false);
 
 type Props<ResponseDataType> = {
@@ -50,6 +50,8 @@ function Form<ResponseDataType = unknown>({ children, fetcher, onSubmit, method,
 }
 
 export function FormWithValidation<ResponseDataType = unknown>({ children, fetcher, onSubmit, method, actionPath }: FormWithValidationProps<ResponseDataType>): React.ReactElement<FormWithValidationProps<ResponseDataType>> {
+  const submit = useSubmit();
+
   const [didTapSubmit, setDidTapSubmit] = React.useState(false);
   const [currentEvent, setCurrentEvent] = React.useState<React.FormEvent<HTMLFormElement>|undefined>(undefined);
   const [didPassData, setDidPassData] = React.useState<DidPassData>({});
@@ -57,7 +59,7 @@ export function FormWithValidation<ResponseDataType = unknown>({ children, fetch
   const set = React.useMemo(() => {
     return {
       didPassData: setDidPassData,
-      event: () => {setCurrentEvent(undefined)},
+      cancelPendingSubmit: () => {setCurrentEvent(undefined)},
     }
   }, [])
 
@@ -75,13 +77,20 @@ export function FormWithValidation<ResponseDataType = unknown>({ children, fetch
         formDataRecord[key] = value
       }
     }
+    
+    const submitOptions = {
+      method: method || 'post',
+      action: actionPath
+    };
+
     if (onSubmit) {
       onSubmit(event, formDataRecord);
+    } else if (fetcher) {
+      fetcher.submit(formDataRecord, submitOptions);
     } else {
-      target.submit();
+      submit(formDataRecord, submitOptions);
     }
-    console.log("Form Submitted Successfully");
-  }, [onSubmit]);
+  }, [onSubmit, fetcher, method, actionPath, submit]);
 
   const localOnSubmit = React.useCallback((event: React.FormEvent<HTMLFormElement>) => {
     // 常にネイティブ送信を防止
@@ -91,20 +100,16 @@ export function FormWithValidation<ResponseDataType = unknown>({ children, fetch
 
     if (didPass) {
       // もし既にバリデーションが通っているなら、即座に送信
-      console.log("Submitting immediately (already valid)");
       runSubmitLogic(event.currentTarget, event);
     } else {
       // まだ通っていないなら、イベントを "送信待ち" として保存
-      console.log("Validation pending, saving event...");
       setCurrentEvent(prev => prev? prev: event);
     }
   }, [didPass, runSubmitLogic]);
 
   React.useEffect(() => {
     if (didPass && currentEvent) {
-      console.log("Validation passed, running pending submission...");
-      const syntheticEvent: React.FormEvent<HTMLFormElement> = {...currentEvent};
-      runSubmitLogic(currentEvent.currentTarget, syntheticEvent);
+      runSubmitLogic(currentEvent.currentTarget, currentEvent);
       setCurrentEvent(undefined);
     }
   }, [didPass, currentEvent, runSubmitLogic]);

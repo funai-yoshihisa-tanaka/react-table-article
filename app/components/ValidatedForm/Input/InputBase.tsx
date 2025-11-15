@@ -149,7 +149,7 @@ export function InputBase({ schema, controlledState, required, defaultValue, syn
       <input
         {...props}        
         onFocus={(e) => {
-          set.event()
+          set.cancelPendingSubmit()
           if (onFocus) {
             onFocus(e)
           }
