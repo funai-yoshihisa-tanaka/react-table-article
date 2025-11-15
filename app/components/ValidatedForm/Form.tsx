@@ -1,4 +1,5 @@
 import React from 'react'
+import { type FetcherWithComponents, type HTMLFormMethod } from 'react-router'
 
 type DidPassData = Record<string, boolean>
 
@@ -10,8 +11,18 @@ type FormDispatchContextType = {
 const FormDispatchContext = React.createContext<FormDispatchContextType>({didPassData: ()=>{}, event: ()=>{}});
 const FormStateContext = React.createContext<boolean>(false);
 
-type Props = {
+type Props<ResponseDataType> = {
   children?: React.ReactNode;
+  fetcher?: FetcherWithComponents<ResponseDataType>;
+  method?: HTMLFormMethod;
+  actionPath?: string;
+}
+
+type FormProps<ResponseDataType> = Props<ResponseDataType> & {
+  onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
+}
+
+type FormWithValidationProps<ResponseDataType> = Props<ResponseDataType> & {
   onSubmit?: (event: React.FormEvent<HTMLFormElement>, formDataRecord: Record<string, string>) => void;
 }
 
@@ -23,8 +34,22 @@ export function useFormState() {
   return React.useContext(FormStateContext);
 }
 
+function Form<ResponseDataType = unknown>({ children, fetcher, onSubmit, method, actionPath }: FormProps<ResponseDataType>): React.ReactElement<FormProps<ResponseDataType>> {
+  if ( fetcher ) {
+    return (
+      <fetcher.Form method={method} action={actionPath} onSubmit={onSubmit}>
+        {children}
+      </fetcher.Form>
+    )
+  }
+  return (
+    <form method={method} action={actionPath} onSubmit={onSubmit}>
+      {children}
+    </form>
+  )
+}
 
-export function FormWithValidation({ children, onSubmit }: Props): React.ReactElement<Props> {
+export function FormWithValidation<ResponseDataType = unknown>({ children, fetcher, onSubmit, method, actionPath }: FormWithValidationProps<ResponseDataType>): React.ReactElement<FormWithValidationProps<ResponseDataType>> {
   const [didTapSubmit, setDidTapSubmit] = React.useState(false);
   const [currentEvent, setCurrentEvent] = React.useState<React.FormEvent<HTMLFormElement>|undefined>(undefined);
   const [didPassData, setDidPassData] = React.useState<DidPassData>({});
@@ -85,7 +110,7 @@ export function FormWithValidation({ children, onSubmit }: Props): React.ReactEl
   }, [didPass, currentEvent, runSubmitLogic]);
 
   return (
-    <form onSubmit={localOnSubmit}>
+    <Form onSubmit={localOnSubmit} fetcher={fetcher} method={method} actionPath={actionPath}>
       {/* 4. 2つの Context Provider でラップ */}
       {/* setDidPassData は不変なので、これが原因で子は再レンダリングされない */}
       <FormDispatchContext.Provider value={set}>
@@ -94,6 +119,6 @@ export function FormWithValidation({ children, onSubmit }: Props): React.ReactEl
           { children }
         </FormStateContext.Provider>
       </FormDispatchContext.Provider>
-    </form>
+    </Form>
   )
 }
