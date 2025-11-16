@@ -1,327 +1,251 @@
-# `React` で構築する、再利用可能なフォームバリデーションシステム
+# `React Router` と連携する、再利用可能なフォームバリデーションシステム
+React Router でフォームを扱う際、クライアントサイドの高度なバリデーションと、action関数へのデータ送信をどう両立させるかは悩みの種です。
+ネイティブな `<form>` 送信ではバリデーションが難しく、かといって `onSubmit` ですべて制御すると `React Router` のデータフローの恩恵を受けにくくなります。
+この記事では、以前作成した[こちら](https://qiita.com/yoshihisa_tanaka/private/de4772a4227690f9f3ed)の `React Context` と `useRef` を活用した宣言的なバリデーションシステムに、 `React Router` の `useSubmit` フックと `Fetcher` を統合する方法を紹介します。
+これにより、クライアントサイドでの高パフォーマンスなバリデーションと、 `React Router` の強力なデータ管理フローを両立させます。
 
-`React` でフォームを作成する際、バリデーションロジックの実装は常に悩みの種です。
-フィールドごとのエラーハンドリング、フォーム全体の送信制御、確認用フィールドの同期...。
-これらをコンポーネントの責務として適切に分離し、かつ再利用可能に保つのは簡単ではありません。
-この記事では `React Context` を活用した、宣言的で拡張性の高いフォームバリデーションシステムの構築方法を紹介します。
-
-また、バリデーションロジックに `Zod` を採用していますが、深い意味はありません。
+（バリデーションロジックには `Zod` を採用していますが、これは他のライブラリでも代替可能です）
 
 ## アーキテクチャとディレクトリ構造
 
-このシステムの核心は、責務の明確な分離にあります。まず、コンポーネントがどのように配置されているか、その全体像を見てみましょう。
-
+このシステムの核心は、責務の明確な分離にあります。
 ```
-app/
 ├── components/
-│   ├── ValidatedForm/
-│   │   ├── inputs/
-│   │   │   ├── EmailInput.tsx
-│   │   │   ├── InputBase.tsx
-│   │   │   ├── PhoneNumberInput.tsx
-│   │   │   └── index.tsx
-│   │   ├── Form.tsx
-│   │   └── index.tsx
-│   └── ValidationMessages.tsx
-└── routes/form.tsx
+│ ├── ValidatedForm/
+│ │ ├── Input/
+│ │ │ ├── EmailInput.tsx
+│ │ │ ├── InputBase.tsx
+│ │ │ ├── PhoneNumberInput.tsx
+│ │ │ └── index.tsx
+│ │ ├── ClearButton.tsx
+│ │ ├── Form.tsx
+│ │ └── index.tsx
+│ └── ValidationMessages.tsx
+└── App.tsx
 ```
+各ファイルの役割は明確に分離されています。
 
-また、各ファイルの役割は明確に分離されています。
+### 1. Form.tsx (フォームコンテキストと送信制御):
+フォーム全体の「状態」と「更新関数」を管理する司令塔です。
+`Context` を通じて、子コンポーネントに「送信が押されたか」( `FormStateContext` )、バリデーション結果や各種関数を登録するための「更新関数群」( `FormDispatchContext` )、「リセット関数」( `FormClearContext` ) を提供します。 
+そして最も重要な役割として、 `onSubmit` を制御し、バリデーション通過後に `useSubmit` または `fetcher` を使って `React Router` の `action` にデータを送信します。
 
-### 1. `src/components/ValidatedForm/Form.tsx` (フォームコンテキスト提供)
+### 2. InputBase.tsx (共通入力ロジック):
+すべての入力コンポーネントの基盤です。 `onBlur` や「送信」シグナルでバリデーションを実行し、 `FormDispatchContext` 経由で結果を親に報告します。
 
-フォーム全体のバリデーション状態（入力された値のいずれにも不備が無いかどうかといった状態）を管理します。
-`React Context` ( `FormStateContext` と `FormDispatchContext` ) を通じて、
-子コンポーネントに「送信ボタンが押されたか( `didTapSubmit` )」をブロードキャストし、
-子コンポーネントからは「子コンポーネント自身のバリデーション結果( `setDidPassData` )」を収集します。
+### 3. ClearButton.tsx (リセットトリガー):
+`FormClearContext` から「リセット関数」を受け取り、 `onClick` で実行するだけのシンプルなコンポーネントです。
 
-### 2. `src/components/ValidatedForm/inputs/InputBase.tsx` (共通入力ロジック)
-
-すべての入力コンポーネントの基盤となる、最も重要なコンポーネントです。
-スキーマを受け取り、 `onBlur` 時、または親からの「送信」シグナル ( `didTapSubmit` ) を受け取った時にバリデーションを実行します。
-バリデーション結果を `FormDispatchContext` 経由で報告します。
-
-### 3. `inputs/EmailInput.tsx` / `PhoneNumberInput.tsx` (具体的なフィールドのコンポーネント)
-
-`InputBase` をラップし、特定の入力タイプに必要なスキーマや、 `beforeValidate` （バリデーション前の値整形）関数を渡すだけの「薄い」コンポーネントです。
-これらは、フォームバリデーションシステムを利用するための具体例であり、
-伝えたいことは、 `InputBase` をラップするだけで、複雑な特定の処理を行うフィールドを量産できるということです。
-
-### 4. `src/components/ValidationMessages.tsx` (エラー表示)
-
-`InputBase` から渡されたエラーメッセージの配列を単純に表示する汎用コンポーネントです。
-
----
+### 4. `EmailInput.tsx` / `PhoneNumberInput.tsx` (具象コンポーネント):
+`InputBase` をラップし、特定の入力タイプに必要なスキーマ（ `zod` ）や、 `beforeValidate` （バリデーション前の値整形）関数を渡す「薄い」コンポーネントです。
 
 ## 主要コンポーネントの詳細
 
-### 1. `src/components/ValidatedForm/Form.tsx` - フォームの「司令塔」
+### 1. src/components/ValidatedForm/Form.tsx - フォームの「司令塔」
+`Form` コンポーネントは、バリデーションの状態収集、リセット機能の提供、そして `React Router` へのデータ送信という3つの主要な責務を持ちます。
 
-`Form` コンポーネントは、`onSubmit` イベントをハンドルする「司令塔」です。
-`Context` を「状態配信用( `FormStateContext` )」と「更新関数配信用( `FormDispatchContext` )」の2つに分離し、不要な再レンダリングを抑制しています。
+```typescript:Form.tsx
+import React from 'react'
+import { useSubmit, type FetcherWithComponents, type HTMLFormMethod } from 'react-router'
 
-```tsx:src/components/ValidatedForm/Form.tsx
-import React, { useEffect } from 'react'
+// Context や型定義 (DidPassData, ClearFuncsRecord など) は前記事と同様なので省略
 
-type DidPassData = Record<string, boolean>
-
-// 1. Context を Dispatch (更新) と State (状態) に分離
-const FormDispatchContext = React.createContext<React.Dispatch<React.SetStateAction<DidPassData>>>(()=>{});
-const FormStateContext = React.createContext<boolean>(false);
-
-// 2. 外部から安全に利用するためのカスタムフック
-export function useFormDispatch() {
-  return React.useContext(FormDispatchContext);
-}
-export function useFormState() {
-  return React.useContext(FormStateContext);
+// Props定義
+type Props<ResponseDataType> = {
+  children?: React.ReactNode;
+  fetcher?: FetcherWithComponents<ResponseDataType>;
+  method?: HTMLFormMethod;
+  actionPath?: string;
 }
 
-export default function Default({ children, ... }: Props) {
+// fetcherの有無により form / fetcher.Form を切り替えるため
+type FormProps<ResponseDataType> = Props<ResponseDataType> & {
+  onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
+}
+function Form<ResponseDataType = unknown>({ children, fetcher, onSubmit, method, actionPath }: FormProps<ResponseDataType>): React.ReactElement<FormProps<ResponseDataType>> {
+  if ( fetcher ) {
+    return (
+      <fetcher.Form method={method} action={actionPath} onSubmit={onSubmit}>
+        {children}
+      </fetcher.Form>
+    )
+  }
+  return (
+    <form method={method} action={actionPath} onSubmit={onSubmit}>
+      {children}
+    </form>
+  )
+}
+type FormWithValidationProps<ResponseDataType> = Props<ResponseDataType> & {
+  onSubmit?: (event: React.FormEvent<HTMLFormElement>, formDataRecord: Record<string, string>) => void;
+}
+
+// メインのコンポーネント
+export function FormWithValidation<ResponseDataType = unknown>({ children, fetcher, onSubmit, method, actionPath }: FormWithValidationProps<ResponseDataType>): React.ReactElement<FormWithValidationProps<ResponseDataType>> {
+  // 1. React Router の useSubmit フックを取得
+  const submit = useSubmit();
+
   const [didTapSubmit, setDidTapSubmit] = React.useState(false);
   const [currentEvent, setCurrentEvent] = React.useState<React.FormEvent<HTMLFormElement>|undefined>(undefined);
   const [didPassData, setDidPassData] = React.useState<DidPassData>({});
+  const clearFuncsRecordRef = React.useRef<ClearFuncsRecord>({});
 
-  // 3. 全ての子コンポーネントのバリデーション結果を監視
-  const didPass = React.useMemo(() => {
-    if (Object.keys(didPassData).length === 0) return false;
-    return Object.values(didPassData).every(v => v);
-  }, [didPassData]);
+  // dispatchContext, clear, didPass の定義 (前記事と同様なので省略)
+  // ...
 
-  // フォーム送信の本体ロジック
-  const runSubmitLogic = React.useCallback((target: HTMLFormElement, event: React.FormEvent<HTMLFormElement>) => {
+  // 2. 【核心】バリデーション通過後の「実際の送信」ロジック
+  const runSubmitLogic = React.useCallback((event: React.FormEvent<HTMLFormElement>) => {
+    // FormData をプレーンなオブジェクトに変換
     const formDataRecord: Record<string, string> = {}
-    // 6. FormData API を使って name 属性から値を取得
-    for (const [key, value] of new FormData(target)) {
+    for (const [key, value] of new FormData(event?.target as HTMLFormElement)) {
       if (typeof value == 'string') {
         formDataRecord[key] = value
       }
     }
-    // ... (setFormDataRecord, onSubmit 実行)
-  }, [onSubmit, setFormDataRecord]);
+    
+    const submitOptions = {
+      method: method || 'post',
+      action: actionPath
+    };
 
-  const localOnSubmit = React.useCallback((event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    // 4. まずバリデーションをトリガー
-    setDidTapSubmit(true);
-
-    if (didPass) {
-      // 既に通っているなら即時送信
-      runSubmitLogic(event.currentTarget, event);
+    if (onSubmit) {
+      // 独自の onSubmit があればそれを実行 (React Router を使わない場合)
+      onSubmit(event, formDataRecord);
+    } else if (fetcher) {
+      // 3. fetcher が渡されていれば、fetcher.submit を使う
+      fetcher.submit(formDataRecord, submitOptions);
     } else {
-      // まだなら、イベントを "送信待ち" として保存
-      setCurrentEvent(prev => prev? prev: event);
+      // 4. それ以外の場合は、useSubmit() で React Router の action に送信
+      submit(formDataRecord, submitOptions);
     }
-  }, [didPass, runSubmitLogic]);
+  }, [onSubmit, fetcher, method, actionPath, submit]);
 
-  // 5. バリデーション結果(didPass)が変わり、かつ "送信待ち" イベントがあれば送信実行
-  useEffect(() => {
-    if (didPass && currentEvent) {
-      const syntheticEvent: React.FormEvent<HTMLFormElement> = {...currentEvent};
-      runSubmitLogic(currentEvent.currentTarget, syntheticEvent);
-      setCurrentEvent(undefined);
-    }
-  }, [didPass, currentEvent, runSubmitLogic]);
+  // 5. フォームの onSubmit イベントを乗っ取るための localOnSubmit と useEffectの設定 (前記事と同様なので省略)
+  // ...
 
+  // 6. 描画するフォームを <form> または <fetcher.Form> に切り替える
   return (
-    <form onSubmit={localOnSubmit}>
-      <FormDispatchContext.Provider value={setDidPassData}>
-        <FormStateContext.Provider value={didTapSubmit}>
-          { children }
-        </FormStateContext.Provider>
-      </FormDispatchContext.Provider>
-    </form>
+    <Form onSubmit={localOnSubmit} fetcher={fetcher} method={method} actionPath={actionPath}>
+      // (前記事と同様なので省略)
+      // ...
+    </Form>
   )
 }
 ```
 
-キーとなるのは `useEffect` を使った送信ロジックです。
-`onSubmit` が発生した時点では、まだ子コンポーネントのバリデーションが完了していない可能性があるため、 `didTapSubmit` を `true` にしてバリデーションをトリガーします。
-すべての子が `didPassData` を更新し、 `didPass` が `true` になったタイミングで、 `useEffect` が「送信待ち」だった `currentEvent` を使ってフォーム送信を実行します。
+このコンポーネントの設計は、前記事 で解説されているパフォーマンス（ `Context` 分離、 `useRef` ）への配慮に加え、 `React Router` との連携が鍵となります。
 
-ここで、再レンダリングの頻度を考えます。
-1文字入力するたびに `Form` や他の入力欄が再レンダリングされては、パフォーマンスが低下します。
-このアーキテクチャでは、2つの工夫によってそれを回避しています。
+#### 1. `onSubmit` の乗っ取り:
+`localOnSubmit` で `event.preventDefault()` を呼び出し、ブラウザによるネイティブなフォーム送信を 常に 停止させます。これにより、クライアントサイドでのバリデーションロジックを確実に実行する時間を確保します。
 
-1.  **バリデーションの実行タイミング:**
-    1文字ごとの入力( `onChange` )では `InputBase` の内部的な `state` が更新されるだけです。親の `Form` コンポーネントの状態( `didPassData` )を更新するバリデーション( `validate` 関数)が実行されるのは、フォーカスが外れた時( `onBlur` )か、送信ボタンが押された時( `formState` が `true` になった時) のみです。
+#### 2. 遅延送信:
+ユーザーが送信ボタンを押した時点（ `localOnSubmit` ）でバリデーション（ `didPass` ）が通っていない場合、送信イベント（ `event` ）を `currentEvent` に一時保存します。
 
-2.  **Context の分離による最適化:**
-    `Form.tsx` では `Context` を「更新関数( `FormDispatchContext` )」と「状態( `FormStateContext` )」に分離しています。 `React` の `Context` の特性上、 `setDidPassData` のような更新関数はコンポーネントの生存期間中、参照が変わりません。
-    各 `InputBase` は `FormDispatchContext` からこの変わらない関数を受け取るため、他の入力欄がバリデーションを実行して `Form` の `state` が更新されても、 `FormDispatchContext` を購読しているコンポーネントが再レンダリングされることはありません。
+#### 3. useEffect による監視:
+`InputBase` コンポーネント群での入力とバリデーションが進み、全フィールドのバリデーションが通過すると `didPass` が `true` になります。 `useEffect` がこれを検知し、保存されていた `currentEvent` を使って `runSubmitLogic` を実行します。
 
-`InputBase` が `FormStateContext` の値( `didTapSubmit` ) の変更によって再レンダリングされるのは、ユーザーが送信ボタンを押した時の1回だけです。
+#### 4. React Router への送信:
+`runSubmitLogic` が、このシステムの核心です。 `fetcher` が `props` として渡されていれば `fetcher.submit()` を、そうでなければ `useSubmit()` を呼び出します。
+どちらも、 `React Router` が管理する `action` 関数に対して、プログラム的にデータを送信するための公式な方法です。
 
-### 2. src/components/ValidatedForm/inputs/InputBase.tsx - バリデーションの「実行役」
+### 2. src/components/ValidatedForm/Input/InputBase.tsx - 高機能な「実行役」
 
-このコンポーネントが、本システムの「頭脳」です。 `useFormDispatch` と `useFormState` を使って親の `Form` コンポーネントと通信します。
+`InputBase` の設計は、前記事 で解説されているものと同一です。 `Form` コンポーネント（親）が `React Router` との通信をすべて担当するため、 `InputBase` 自身は `React Router` を意識する必要がありません。
 
-```tsx:src/components/ValidatedForm/inputs/InputBase.tsx
-import { useCallback, useEffect, useId, useMemo, useRef, useState} from'react';
-import { useFormDispatch, useFormState } from '../Form';
-// ...
-export function InputBase({ schema, controlledState, required, ...props }: Props) {
-  // 1. 親の Context から更新関数と状態を取得
-  const setDidPassData = useFormDispatch();
-  const formState = useFormState(); // didTapSubmit の値 (true/false)
-  const myId = useId();
+1. `useFormDispatch` と `useFormState` を通じて親と通信します。
 
-  // 2. 親にバリデーション結果を報告する関数をメモ化
-  const setDidPass = useCallback((didPass: boolean) => {
-    setDidPassData((prev) => {
-      // イミュータブルに更新
-      return {...prev, [myId]: didPass};
-    });
-  }, [setDidPassData, myId]);
+2. マウント時に `useEffect` を使い、自身のバリデーション状態（ `setDidPass` ）とリセット関数（ `setClearFunctions` ）を親に「登録」します。
 
-  const [didValidate, setDidValidate] = useState( false );
-  const valueState = useState( defaultValue || '' );
-  const [value, _setValue] = controlledState? controlledState: valueState;
-  const valueRef = useRef(value);
-  const setValue:Dispatch<SetStateAction<string>> = /* ... (valueRefを同期させるロジック) ... */ ;
-  const [internalErrorMessage, setInternalErrorMessage] = useState<string[]>([]);
+3. アンマウント時にクリーンアップ関数で、親から自身の状態と関数を「登録解除」します。
 
-  // ... (localSchema, syncErrorMessage)
+4. `onFocus` で `cancelPendingSubmit()` を呼び出し、「バリデーションエラー修正後に意図せず即時送信される」バグを防ぎます。
 
-  const validate = useCallback(() => {
-    setDidValidate(true);
-    const value = valueRef.current
-    if (validateIfDidPassRequirement(value, required, setDidPass, setInternalErrorMessage)) {
-      const targetValue = beforeValidate(value); // 値を整形
-      const { error } = localSchema.safeParse(targetValue);
-      // ... (エラーハンドリング)
-      syncValidation(targetValue, syncWith, syncErrorMessage, setDidPass, setInternalErrorMessage);
-      setValue(targetValue); // 整形後の値で state を更新
-    }
-  }, [ ... ]); // 依存配列
+5. src/components/ValidatedForm/ClearButton.tsx - 安全なリセットトリガー
+このコンポーネントも 前記事の解説と同一です。 `useFormClear` で取得した `clear` 関数を `onClick` で実行します。
 
-  // 3. アンマウント時に親の state から自身のエントリを削除
-  useEffect(() => {
-    setDidPass(!required); // 初期状態をセット
-    return () => {
-      setDidPassData((prev) => {
-        const newState = { ...prev };
-        delete newState[myId];
-        return newState;
-      });
-    };
-  }, [setDidPassData, myId, required, setDidPass]);
+最も重要なのは、 `type="button"` を明示的に指定している点です。もし `type="reset"` を使用すると、 `React` の `State` 更新と `HTML` ネイティブの `reset` 動作が競合し、 `React` の `State` と DOM の値が不整合を起こすバグの原因となります。 `type="button"` にすることで、状態管理を 100% `React` の制御下に置くことができます。
 
-  // 4. 親 (Form) から送信が押されたら (formState === true)、
-  //    まだバリデーション (onBlur) していなければ、強制的に実行
-  useEffect(() => {
-    if (formState && !didValidate) {
-      validate();
-    }
-  }, [formState, didValidate, validate]);
+## 実際の使用例 (src/App.tsx)
+`React Router` 環境で、この `FormWithValidation` を使用する例です。ルート遷移を伴う通常の `action` 送信と、 `Fetcher` を使った非同期送信の両方に対応できます。
 
-  return (
-    <div>
-      <input
-        {...props} // name 属性などもここで渡される
-        value={value}
-        onChange={(e) => {setValue(e.target.value)}}
-        onBlur={validate} // 5. onBlur でバリデーション実行
-      />
-      <ValidationMessages messages={internalErrorMessage} />
-    </div>
-  );
-}
-```
-
-`InputBase` は、`onBlur` による即時検証と、`formState`（送信ボタン押下）による遅延検証の両方をサポートしています。
-また、`useEffect` のクリーンアップ関数を利用して、コンポーネントがアンマウントされた際に `Form` コンポーネントの `didPassData` state から自身のIDを削除し、メモリリークや不要なバリデーション結果が残るのを防ぎます。
-
-### 3. src/components/ValidatedForm/inputs/PhoneNumberInput.tsx - 「値の整形」と「スキーマ定義」
-
-`InputBase` の強力さを示す好例が `PhoneNumberInput` です。
-
-```tsx:src/components/ValidatedForm/inputs/PhoneNumberInput.tsx
-import zod from 'zod';
-import { InputBase, type CommonProps } from "./InputBase";
-
-export function PhoneNumberInput({type, ...props}: EmailInputProps) {
-  const schema = zod.string().regex(/^[0-9]+$/, {message: '数値のみ入力してください。'});
-  return <InputBase
-    schema={schema}
-    beforeValidate={(value) => {
-      // 1. ハイフンを削除
-      // 2. 全角数字を半角に変換
-      return value.replaceAll('-', '').replace(/[０-９]/g, function(s) {
-        return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
-      });
-    }}
-    minLength={10}
-    maxLength={11}
-    {...props}
-  />;
-}
-```
-
-ここでは、 `InputBase` に対して「半角数字のみ」のスキーマと、バリデーション前にハイフンや全角数字を整形する `beforeValidate` 関数を渡しています。
-これにより、 `InputBase` 自体は電話番号のフォーマットを一切知る必要がなく、ロジックが完全に分離されています。
-
-なお、この `beforeValidate` の実装により、ユーザーが `090-1234-5678` と入力してフォーカスを外す（`onBlur`）と、`validate` 関数が実行され、入力欄の値が `09012345678` に自動的に書き換わります。
-これは、ユーザーにエラーを提示して再入力を強いるのではなく、システム側でデータをクレンジングすることでユーザー体験を向上させ、常に整形されたデータを扱うことを意図したものです。
-
----
-
-## 実際の使用例 (routes/form.tsx)
-
-```tsx:routes/form.tsx
+```typescript:App.tsx
 import { useState } from 'react';
-import { FormWithValidation, EmailInput, PhoneNumberInput } from './components/ValidatedForm'
+import { useFetcher } from 'react-router-dom'; // useFetcher をインポート
+import { FormWithValidation, EmailInput, PhoneNumberInput, ClearButton } from './components/ValidatedForm'
 
 export default function App() {
   const [email, setEmail] = useState('');
+  
+  // React Router の Fetcher を使う例
+  const fetcher = useFetcher();
+
   return (
     <>
-      <h1>You did it</h1>
-      <FormWithValidation>
+      <h1>フォームの例</h1>
+      
+      {/* 例1: ルート遷移を伴う通常のフォーム送信 (action へ) */}
+      <FormWithValidation actionPath="/signup">
+        <h2>サインアップ (ページ遷移あり)</h2>
+        <div>
+          <EmailInput name="email-signup" required />
+        </div>
+        <div>
+          <PhoneNumberInput name="phone-signup" />
+        </div>
+        <div>
+          <ClearButton>リセット</ClearButton>
+          <button type="submit">サインアップ</button>
+        </div>
+      </FormWithValidation>
+
+      <hr style={{ margin: '2rem 0' }} />
+
+      {/* 例2: Fetcher を使った非同期フォーム送信 (action へ) */}
+      <FormWithValidation fetcher={fetcher} actionPath="/update-profile">
+        <h2>プロフィール更新 (ページ遷移なし)</h2>
         <div>
           {/* 制御コンポーネントとして */}
-          <EmailInput name="email" controlledState={[email, setEmail]} />
+          <EmailInput name="email" controlledState={[email, setEmail]} required />
         </div>
         <div>
           {/* 別の state と値を同期させるバリデーション */}
-          <EmailInput name="email-confirm" syncWith={email} />
+          <EmailInput name="email-confirm" syncWith={email} required />
         </div>
         <div>
           {/* 非制御コンポーネントとして (name属性が重要) */}
           <PhoneNumberInput name="phone" />
         </div>
-        <button>test</button>
+        {/* ボタンエリア */}
+        <div>
+          <ClearButton>リセット</ClearButton>
+          <button type="submit">プロフィール更新</button>
+        </div>
+        {fetcher.state !== 'idle' && <p>更新中...</p>}
+        {fetcher.data && <p>更新完了: {JSON.stringify(fetcher.data)}</p>}
       </FormWithValidation>
     </>
   );
 }
 ```
 
-`routes/form.tsx` では、 `FormWithValidation` コンポーネント（実際には `Form.tsx` をエクスポートしたもの）で各入力コンポーネントをラップしています。
-`EmailInput` は `controlledState` を渡して `App` 側の `state` と同期させ、確認用フィールドは `syncWith` プロパティで `email` の値と一致しているか確認しています。
-一方、`PhoneNumberInput` は `props` を渡さず、`InputBase` 内部の `state` で動作する非制御コンポーネントとしても利用可能です。
+### 非制御コンポーネントの値収集
 
-ここで、`name` 属性と `controlledState` が両方利用可能になっているのはなぜか考えます。
+`InputBase` は、 `controlledState` が渡されればその `state` を参照する「制御コンポーネント」として動作し、渡されなければ内部の `useState` を参照する「非制御コンポーネント」として動作します。
 
-`InputBase` は、内部に `value` を持つ `<input>` をレンダリングします。
-この `<input>` は、`controlledState` が渡されればその `state` を参照する「制御コンポーネント」として動作し、渡されなければ `InputBase` 内部の `useState` を参照する「非制御コンポーネント」として動作します。
-
-では、`PhoneNumberInput` のように `controlledState` を渡さない非制御コンポーネントの値は、いつどのように収集するのでしょうか。
+では、 `PhoneNumberInput` のように `controlledState` を渡さない非制御コンポーネントの値は、いつどのように収集するのでしょうか。
 
 答えは `Form.tsx` の `runSubmitLogic` 関数にあります。
-この関数は、 `new FormData(target)` を使って、フォーム送信時にDOMから値を収集します。
-`FormData` API は `<input>` の `name` 属性をキーとして値を収集するため、`controlledState` がなくても、`name="phone"` が指定されていれば値を正しく取得できます。
+この関数は、`new FormData(event?.target as HTMLFormElement)` を使ってDOMから値を収集し、それをプレーンなオブジェクト `formDataRecord` に変換します。
 
-`controlledState` が必要なのは、今回の `email` と `email-confirm` のように、`syncWith` を使ってコンポーネント間で値をリアルタイムに同期させる（`email` の値を `email-confirm` が知る）必要がある場合などに限定されます。
+この `formDataRecord` が `submit(formDataRecord, ...)` または `fetcher.submit(formDataRecord, ...)` へ渡されます。
+`React Router` の `submit` 関数は `FormData` だけでなくオブジェクトも扱えるため、 `name="phone"` が指定されていれば値を正しく `action` に送信できます。
 
----
+`controlledState` が必要なのは、今回の `email` と `email-confirm` のように、 `syncWith` を使ってコンポーネント間で値をリアルタイムに比較する（ `email` の値を `email-confirm` が知る）必要がある場合などに限定されます。
 
 ## まとめ
 
-この記事では、`React Context` を用いたフォームバリデーションシステムのアプローチを紹介しました。
+この記事では、 `React Context` と `useRef` を用いた高パフォーマンスなバリデーションシステムを、`React Router` のデータフローと統合するアプローチを紹介しました。
 
-* **責務の分離:** `Form` コンポーネントが状態の集約と送信トリガー、 `InputBase` が個別のバリデーション実行と状態報告、具象コンポーネント（ `EmailInput` など）がスキーマと値の整形 という形で、それぞれの役割が明確に分離されています。
-* **宣言的な状態管理:** `Context` を使うことで、 `InputBase` は「送信ボタンが押された」という事実 ( `formState` ) を知るだけでよく、フォームの構造や他の入力フィールドの状態を意識する必要がありません。
-* **拡張性:** `InputBase` が `beforeValidate` や `syncWith` といった汎用的なインターフェースを提供することで、新しいバリデーションルールや入力形式（例： `PasswordInput` ）の追加が容易になっています。
-
-このアーキテクチャは、フォームの状態管理を一元化しつつ、各入力コンポーネントの再利用性を高める一つの方法です。
+* **責務の分離:** `Form` が「仲介役・司令塔」、 `InputBase` が「実行役・登録役」として明確に分離されています。
+* **`React Router` との連携:** `onSubmit` を `preventDefault()` で乗っ取り、バリデーション通過後に `useSubmit` または `fetcher.submit` でプログラム的に `action` へデータを送信します。
+* **堅牢なバグ修正:** `onFocus` による「保留中送信のキャンセル」や、 `type="button"` による「リセット動作の競合回避」など、 `React` 特有の落とし穴をふさぐ堅牢な設計になっています。
