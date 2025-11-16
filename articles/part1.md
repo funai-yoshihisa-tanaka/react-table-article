@@ -1,4 +1,13 @@
 # `React Router` と連携する、再利用可能なフォームバリデーションシステム
+
+本記事は3部作のPart 1です。
+
+* Part 1
+* [Part 2](https://qiita.com/yoshihisa_tanaka/private/e2ff43e1488dcb43cd18)
+* [Part 3]()
+
+[コード全体はこちら](https://github.com/funai-yoshihisa-tanaka/react-table-article)（3部作全体です。）
+
 React Router でフォームを扱う際、クライアントサイドの高度なバリデーションと、action関数へのデータ送信をどう両立させるかは悩みの種です。
 ネイティブな `<form>` 送信ではバリデーションが難しく、かといって `onSubmit` ですべて制御すると `React Router` のデータフローの恩恵を受けにくくなります。
 この記事では、以前作成した[こちら](https://qiita.com/yoshihisa_tanaka/private/de4772a4227690f9f3ed)の `React Context` と `useRef` を活用した宣言的なバリデーションシステムに、 `React Router` の `useSubmit` フックと `Fetcher` を統合する方法を紹介します。

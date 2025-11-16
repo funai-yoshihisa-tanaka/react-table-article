@@ -1,5 +1,13 @@
 # `React` と `TypeScript` で、 `props` ベースの汎用 `Table` コンポーネントを作った話
 
+本記事は3部作のPart 1です。
+
+* [Part 1](https://qiita.com/yoshihisa_tanaka/private/74e095f569e42e03cdf1)
+* Part 2
+* [Part 3]()
+
+[コード全体はこちら](https://github.com/funai-yoshihisa-tanaka/react-table-article)（3部作全体です。）
+
 ## イントロダクション
 
 `React` プロジェクトでデータを一覧表示する際、`<table>` タグは欠かせません。
