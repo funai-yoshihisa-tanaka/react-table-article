@@ -2,13 +2,17 @@ import React from 'react'
 import { useSubmit, type FetcherWithComponents, type HTMLFormMethod } from 'react-router'
 
 type DidPassData = Record<string, boolean>
+type ClearFuncsRecord = Record<string, () => void>
 
 type FormDispatchContextType = {
-  didPassData: React.Dispatch<React.SetStateAction<DidPassData>>
-  cancelPendingSubmit: ()=>void
+  setDidPassData: React.Dispatch<React.SetStateAction<DidPassData>>;
+  setClearFunctions: (id: string, func: () => void) => void;
+  removeClearFunctions: (id: string) => void;
+  cancelPendingSubmit: ()=>void;
 }
 
-const FormDispatchContext = React.createContext<FormDispatchContextType>({didPassData: ()=>{}, cancelPendingSubmit: ()=>{}});
+const FormDispatchContext = React.createContext<FormDispatchContextType>({setDidPassData: ()=>{}, setClearFunctions: () => {}, removeClearFunctions: () => {}, cancelPendingSubmit: ()=>{}});
+const FormClearContext = React.createContext<() => void>(() => {});
 const FormStateContext = React.createContext<boolean>(false);
 
 type Props<ResponseDataType> = {
@@ -29,6 +33,9 @@ type FormWithValidationProps<ResponseDataType> = Props<ResponseDataType> & {
 // 外部から安全に利用するためのカスタムフック
 export function useFormDispatch() {
   return React.useContext(FormDispatchContext);
+}
+export function useFormClear() {
+  return React.useContext(FormClearContext);
 }
 export function useFormState() {
   return React.useContext(FormStateContext);
@@ -55,13 +62,24 @@ export function FormWithValidation<ResponseDataType = unknown>({ children, fetch
   const [didTapSubmit, setDidTapSubmit] = React.useState(false);
   const [currentEvent, setCurrentEvent] = React.useState<React.FormEvent<HTMLFormElement>|undefined>(undefined);
   const [didPassData, setDidPassData] = React.useState<DidPassData>({});
+  const clearFuncsRecordRef = React.useRef<ClearFuncsRecord>({});
 
-  const set = React.useMemo(() => {
+  const dispatchContext = React.useMemo(() => {
     return {
-      didPassData: setDidPassData,
+      setDidPassData: setDidPassData,
+      setClearFunctions: (id: string, func: () => void) => {
+        clearFuncsRecordRef.current[id] = func;
+      },
+      removeClearFunctions: (id: string) => {
+        delete clearFuncsRecordRef.current[id];
+      },
       cancelPendingSubmit: () => {setCurrentEvent(undefined)},
     }
-  }, [])
+  }, []);
+
+  const clear = React.useCallback(() => {
+    Object.values(clearFuncsRecordRef.current).forEach(clearFunc => clearFunc());
+  }, []);
 
   const didPass = React.useMemo(() => {
     // didPassData が空の場合は false にする (初期状態)
@@ -70,9 +88,9 @@ export function FormWithValidation<ResponseDataType = unknown>({ children, fetch
   }, [didPassData]);
 
     // フォーム送信の本体ロジックを関数として切り出す
-  const runSubmitLogic = React.useCallback((target: HTMLFormElement, event: React.FormEvent<HTMLFormElement>) => {
+  const runSubmitLogic = React.useCallback((event: React.FormEvent<HTMLFormElement>) => {
     const formDataRecord: Record<string, string> = {}
-    for (const [key, value] of new FormData(target)) {
+    for (const [key, value] of new FormData(event?.target as HTMLFormElement)) {
       if (typeof value == 'string') {
         formDataRecord[key] = value
       }
@@ -100,7 +118,7 @@ export function FormWithValidation<ResponseDataType = unknown>({ children, fetch
 
     if (didPass) {
       // もし既にバリデーションが通っているなら、即座に送信
-      runSubmitLogic(event.currentTarget, event);
+      runSubmitLogic(event);
     } else {
       // まだ通っていないなら、イベントを "送信待ち" として保存
       setCurrentEvent(prev => prev? prev: event);
@@ -109,7 +127,7 @@ export function FormWithValidation<ResponseDataType = unknown>({ children, fetch
 
   React.useEffect(() => {
     if (didPass && currentEvent) {
-      runSubmitLogic(currentEvent.currentTarget, currentEvent);
+      runSubmitLogic(currentEvent);
       setCurrentEvent(undefined);
     }
   }, [didPass, currentEvent, runSubmitLogic]);
@@ -117,13 +135,15 @@ export function FormWithValidation<ResponseDataType = unknown>({ children, fetch
   return (
     <Form onSubmit={localOnSubmit} fetcher={fetcher} method={method} actionPath={actionPath}>
       {/* 4. 2つの Context Provider でラップ */}
-      {/* setDidPassData は不変なので、これが原因で子は再レンダリングされない */}
-      <FormDispatchContext.Provider value={set}>
-        {/* didTapSubmit が false -> true に変わる時だけ、子が再レンダリングされる */}
-        <FormStateContext.Provider value={didTapSubmit}>
-          { children }
-        </FormStateContext.Provider>
-      </FormDispatchContext.Provider>
+      {/* set は不変なので、これが原因で子は再レンダリングされない */}
+      <FormDispatchContext value={dispatchContext}>
+        <FormClearContext value={clear} >
+          {/* didTapSubmit が false -> true に変わる時だけ、子が再レンダリングされる */}
+          <FormStateContext value={didTapSubmit}>
+            { children }
+          </FormStateContext>
+        </FormClearContext>
+      </FormDispatchContext>
     </Form>
   )
 }

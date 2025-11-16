@@ -63,14 +63,14 @@ function syncValidation(
 }
 
 export function InputBase({ schema, controlledState, required, defaultValue, syncWith, minLength = 0, maxLength = DEFAULT_MAX_LENGTH, beforeValidate = (v) => v, onFocus, ...props }: Props) {
-  const set = useFormDispatch();
+  const { setDidPassData, setClearFunctions, removeClearFunctions, cancelPendingSubmit } = useFormDispatch();
   const formState = useFormState();
   const myId = useId();
   const setDidPass = useCallback((didPass: boolean) => {
-    set.didPassData((prev) => {
+    setDidPassData((prev) => {
       return {...prev, [myId]: didPass};
     });
-  }, [set, myId]);
+  }, [setDidPassData, myId]);
 
   const [didValidate, setDidValidate] = useState( false );
   const valueState = useState( defaultValue || '' );
@@ -82,9 +82,6 @@ export function InputBase({ schema, controlledState, required, defaultValue, syn
       valueRef.current = result;
       return result;
     })
-    const result = typeof action === 'function'? action(value) : action;
-    valueRef.current = result;
-    _setValue(result);
   }, [_setValue]);
   const [internalErrorMessage, setInternalErrorMessage] = useState<string[]>([]);
 
@@ -121,16 +118,22 @@ export function InputBase({ schema, controlledState, required, defaultValue, syn
 
   useEffect(() => {
     setDidPass(!required);
+    setClearFunctions(myId, () => {
+      setValue('');
+      setInternalErrorMessage([]);
+      setDidPass(!required)
+    });
 
     // アンマウント時に実行されるクリーンアップ関数
     return () => {
-      set.didPassData((prev) => {
+      setDidPassData((prev) => {
         const newState = { ...prev };
         delete newState[myId];
         return newState;
       });
+      removeClearFunctions(myId)
     };
-  }, [set, myId, required, setDidPass]);
+  }, [setDidPassData, setClearFunctions, removeClearFunctions, myId, required, setValue, setDidPass, setInternalErrorMessage]);
 
   useEffect(() => {
     if (valueRef.current !== '') {
@@ -149,7 +152,7 @@ export function InputBase({ schema, controlledState, required, defaultValue, syn
       <input
         {...props}        
         onFocus={(e) => {
-          set.cancelPendingSubmit()
+          cancelPendingSubmit()
           if (onFocus) {
             onFocus(e)
           }

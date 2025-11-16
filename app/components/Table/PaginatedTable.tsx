@@ -1,4 +1,4 @@
-import { cloneElement, isValidElement, useMemo, useState, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Children } from 'react';
 import { Table, type TableColumnDefinitions } from "./Table";
 import { FormWithValidation } from '../ValidatedForm/Form';
@@ -43,6 +43,11 @@ export function PaginatedTable<ObjectType>({actionPath, columnDefinitions, toKey
   const [pageNum, setPageNum] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  const hiddenButtonRef = useRef<HTMLButtonElement|null>(null);
+  const hiddenButton = useMemo(() => {
+    return (<button className='hidden' ref={hiddenButtonRef} />)
+  }, [hiddenButtonRef]);
+
   const [_formElement, hElement] = useMemo((): [PaginationFormType|null, HTMLElement|null] => {
     let formElement: ReactElement|null = null;
     let hElement: ReactNode|null = null;
@@ -52,13 +57,13 @@ export function PaginatedTable<ObjectType>({actionPath, columnDefinitions, toKey
           const _child = child as PaginationFormType;
           const children = _child.props.children
           formElement = <FormWithValidation onSubmit={(_, formDataRecord) => {
-            loadData(actionPath, formDataRecord, async () => {}, (data) => {
+            loadData(actionPath, {...formDataRecord, pageNum: `${pageNum}`, pageSize: `${pageSize}` }, async () => {}, (data) => {
               console.log(data)
             });
-          }} >{children}</FormWithValidation>
-        } else {
-          hElement = child;
+          }} >{children}{hiddenButton}</FormWithValidation>
         }
+      } else {
+        hElement = child;
       }
     });
     return [formElement, hElement];
@@ -69,8 +74,12 @@ export function PaginatedTable<ObjectType>({actionPath, columnDefinitions, toKey
       loadData(actionPath, { pageNum: `${pageNum}`, pageSize: `${pageSize}` }, async () => {}, (data) => {
         console.log(data)
       });
-    }} ></FormWithValidation>
+    }} >{hiddenButton}</FormWithValidation>
   }, [_formElement]);
+
+  useEffect(() => {
+    hiddenButtonRef.current?.click();
+  }, [pageNum, pageSize, hiddenButtonRef])
 
   return (
     <>
