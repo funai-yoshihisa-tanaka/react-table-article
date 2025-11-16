@@ -15,6 +15,17 @@ const FormDispatchContext = React.createContext<FormDispatchContextType>({setDid
 const FormClearContext = React.createContext<() => void>(() => {});
 const FormStateContext = React.createContext<boolean>(false);
 
+// 外部から安全に利用するためのカスタムフック
+export function useFormDispatch() {
+  return React.useContext(FormDispatchContext);
+}
+export function useFormClear() {
+  return React.useContext(FormClearContext);
+}
+export function useFormState() {
+  return React.useContext(FormStateContext);
+}
+
 type Props<ResponseDataType> = {
   children?: React.ReactNode;
   fetcher?: FetcherWithComponents<ResponseDataType>;
@@ -28,17 +39,6 @@ type FormProps<ResponseDataType> = Props<ResponseDataType> & {
 
 type FormWithValidationProps<ResponseDataType> = Props<ResponseDataType> & {
   onSubmit?: (event: React.FormEvent<HTMLFormElement>, formDataRecord: Record<string, string>) => void;
-}
-
-// 外部から安全に利用するためのカスタムフック
-export function useFormDispatch() {
-  return React.useContext(FormDispatchContext);
-}
-export function useFormClear() {
-  return React.useContext(FormClearContext);
-}
-export function useFormState() {
-  return React.useContext(FormStateContext);
 }
 
 function Form<ResponseDataType = unknown>({ children, fetcher, onSubmit, method, actionPath }: FormProps<ResponseDataType>): React.ReactElement<FormProps<ResponseDataType>> {
