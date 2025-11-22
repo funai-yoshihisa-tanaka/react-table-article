@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-import { usePageDataStateContext } from "./contexts";
+import { useControllerContext } from "./contexts";
 
 type SelectPageSizeProps = {
   onChange: (newSize: number) => void;
@@ -11,9 +11,9 @@ const pageSizeSelections = [ 5, 10, 20, 40 ];
 
 function SelectPageSize({ onChange, currentSize }: SelectPageSizeProps) {
   return (
-    <select onChange={(e) => {onChange(Number(e.target.value))}}>
+    <select defaultValue={currentSize} onChange={(e) => {onChange(Number(e.target.value))}}>
       {pageSizeSelections.map((size) => {
-        return <option key={size} value={size} selected={size === currentSize}>{size}</option>
+        return <option key={size} value={size}>{size}</option>
       })}
     </select>
   );
@@ -54,34 +54,43 @@ function PaginationButton({ currentNum, diff, lastPageNum, setPageNum }: Paginat
 }
 
 type ComponentProps = {
-  isTop: boolean;
-  isLoading: boolean;
   lastPageNum: number;
 }
 
 const diffs = [-2, -1, 0, 1, 2];
 
-export function Component({ isTop, isLoading, lastPageNum }: ComponentProps) {
-  const [pageData, setPageData] = usePageDataStateContext();
+export function Component({ lastPageNum }: ComponentProps) {
+  const controllerContext = useControllerContext();
+
+  if (controllerContext === undefined) {
+    return;
+  }
+
+  const { fetcher, state: [pageData, setPageData], submit } = controllerContext;
 
   const setPageNum = useCallback((newNum: number) => {
-    setPageData(prev => isLoading ? prev : {...prev, pageNum: newNum});
-  }, [setPageData, isLoading]);
+    if (fetcher.state === 'submitting') {
+      return;
+    }
+    setPageData(prev => {
+      const newValue = { ...prev, pageNum: newNum };
+      submit(newValue);
+      return newValue
+    });
+  }, [setPageData, fetcher]);
 
   const setPageSize = useCallback((newSize: number) => {
+    if (fetcher.state === 'submitting') {
+      return;
+    }
     setPageData(prev => {
-      if ( isLoading ) {
-        return prev;
-      }
       const { pageNum: currentNum, pageSize: currentSize } = prev;
-      const currentIndexes = {
-        from: (currentNum - 1) * currentSize + 1,
-        to: currentNum * currentSize,
-      };
-      const newNum = isTop? Math.ceil(currentIndexes.from / newSize) : Math.ceil((currentIndexes.to - 1) / newSize);
-      return { pageNum: newNum, pageSize: newSize };
+      const newNum = Math.ceil((currentNum - 1) * currentSize + 1 / newSize)
+      const newValue = { pageNum: newNum, pageSize: newSize };
+      submit(newValue);
+      return newValue;
     });
-  }, [setPageData, isTop, isLoading]);
+  }, [setPageData, fetcher]);
 
   return (
     <div className="grid grid-cols-6 gap-2">

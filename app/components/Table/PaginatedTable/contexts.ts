@@ -1,13 +1,12 @@
 import { createContext, useContext } from 'react';
-import type { Dispatch, SetStateAction, Ref } from 'react';
+import type { Dispatch, SetStateAction, Ref, RefObject } from 'react';
 import { type FetcherWithComponents } from 'react-router';
 
 
 type FormBaseContextType = {
   fetcher: FetcherWithComponents<unknown>;
-  setIsLoading: Dispatch<SetStateAction<boolean>>;
-  actionPath: string;
   ref: Ref<HTMLFormElement|null>;
+  afterSubmit: () => void;
 } | undefined;
 export const FormBaseContext = createContext<FormBaseContextType>(undefined);
 export function useFormBaseContext() {
@@ -18,14 +17,13 @@ type PageDataContextType = {
   pageNum: number;
   pageSize: number;
 }
-const pageDataDefaultValue: PageDataContextType = {pageNum: 1, pageSize: 10};
-export const PageDataContext = createContext<PageDataContextType>(pageDataDefaultValue);
-export function usePageDataContext() {
-  return useContext(PageDataContext);
-}
 
-type PageDataStateContextType = [PageDataContextType, Dispatch<SetStateAction<PageDataContextType>>];
-export const PageDataStateContext = createContext<PageDataStateContextType>([pageDataDefaultValue, () => {}])
-export function usePageDataStateContext() {
-  return useContext(PageDataStateContext);
+type ControllerContextType = {
+  fetcher: FetcherWithComponents<unknown>;
+  state: [PageDataContextType, Dispatch<SetStateAction<PageDataContextType>>];
+  submit: (newPageData?: {pageNum: number, pageSize: number}) => void;
+} | undefined;
+export const ControllerContext = createContext<ControllerContextType>(undefined);
+export function useControllerContext() {
+  return useContext(ControllerContext);
 }

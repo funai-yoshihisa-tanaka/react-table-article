@@ -1,6 +1,6 @@
-import { useCallback, type ReactNode} from 'react';
+import type { ReactNode} from 'react';
 import { FormWithValidation } from '@/components/ValidatedForm';
-import { useFormBaseContext, usePageDataContext } from './contexts';
+import { useFormBaseContext } from './contexts';
 
 type CriteriaFormProps = {children?: ReactNode}
 
@@ -11,17 +11,10 @@ export function CriteriaForm({ children }: CriteriaFormProps) {
     return <>{children}</>;
   }
 
-  const { fetcher, actionPath, ref, setIsLoading } = baseContext;
-
-  const { pageNum, pageSize } = usePageDataContext();
-
-  const afterSubmit = useCallback((_: unknown, formDataRecord: Record<string, string>) => {
-    setIsLoading(true);
-    fetcher.submit({...formDataRecord, pageNum, pageSize}, { method: 'post', action: actionPath });
-  }, [actionPath, fetcher, pageNum, pageSize, setIsLoading])
+  const { afterSubmit, fetcher, ref } = baseContext;
 
   return (
-    <FormWithValidation ref={ref} fetcher={fetcher} actionPath={actionPath} method="post" onSubmit={afterSubmit} >
+    <FormWithValidation ref={ref} fetcher={fetcher} onSubmit={() => {afterSubmit()}}>
       {children}
     </FormWithValidation>
   );

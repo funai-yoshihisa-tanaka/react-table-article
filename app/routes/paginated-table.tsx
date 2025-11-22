@@ -1,7 +1,5 @@
-import { useFetcher, type ActionFunctionArgs } from 'react-router'
-// import { useEffect, useState } from "react";
-import { PaginatedTable, PaginationForm, type TableColumnDefinitions } from "@/components/Table";
-import { NoValidationInput } from '@/components/ValidatedForm';
+import { PaginatedTable, CriteriaForm, type TableColumnDefinitions } from "@/components/Table";
+import { NoValidationInput, ClearButton } from '@/components/ValidatedForm';
 
 type ObjectType = {id: number, text: string};
 
@@ -21,32 +19,17 @@ const tableColumnDefinitions: TableColumnDefinitions<ObjectType> = [
   },
 ];
 
-export async function action({ request }: ActionFunctionArgs) {
-  // const formData = await request.formData();
-  // const pageNum = Number(formData.get('pageNum'));
-  // const objects: ObjectType[] = [];
-  // for (let i = (pageNum - 1) * 10 + 1; i <= pageNum * 10; i++) {
-  //   objects.push({
-  //     id: i,
-  //     text: `text${i}`,
-  //   });
-  // }
-  // return { objects };
-  throw new Error('')
-}
-
-export default function Home() {
-  const fetcher = useFetcher()
+export default function PaginatedTablePage() {
   return (
     <>
-      <PaginatedTable actionPath='/paginated-table' columnDefinitions={tableColumnDefinitions} toKey={(obj: ObjectType) => obj.id} >
-        <PaginationForm>
+      <PaginatedTable actionPath='/search-paginated-table' columnDefinitions={tableColumnDefinitions} toKey={(obj: ObjectType) => obj.id} >
+        <CriteriaForm>
           <NoValidationInput name="test" />
           <p>
-            <button type="button">クリア</button>
+            <ClearButton>クリア</ClearButton>
             <button >検索</button>
           </p>
-        </PaginationForm>
+        </CriteriaForm>
         <h3>テーブル</h3>
       </PaginatedTable>
     </>

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Table, type TableColumnDefinitions } from "../Table";
 import { useFetcher } from 'react-router';
 
-import { FormBaseContext, PageDataContext, PageDataStateContext } from './contexts'
+import { FormBaseContext, ControllerContext } from './contexts'
 import * as Controller from './controller'
 
 type PaginatedTableProps<ObjectType> = {
@@ -16,52 +17,53 @@ type PaginatedTableProps<ObjectType> = {
   toKey: (object: ObjectType) => string | number;
   /** 表示したいカラムのキー配列 (この配列の順序で表示されます) */
   selectedKeys?: string[];
+  isHideController?: boolean
   children?: ReactNode;
 }
 
-export function PaginatedTable<ObjectType>({actionPath, columnDefinitions, toKey, selectedKeys, children}: PaginatedTableProps<ObjectType>) {
-  const fetcher = useFetcher();
-  const [isLoading, setIsLoading] = useState(true);
-  const [objects, setObjects] = useState<ObjectType[]>([]);
+export function PaginatedTable<ObjectType>({actionPath, isHideController, columnDefinitions, toKey, selectedKeys, children}: PaginatedTableProps<ObjectType>) {
+  const fetcher = useFetcher<{ objects: ObjectType[], pageNum: number, pageSize: number, lastPageNum: number }>();
   const pageDataState = useState<{pageNum: number, pageSize: number}>({pageNum: 1, pageSize: 10});
-  const [lastPageNum, setLastPageNum] = useState(0);
-  const formRef = useRef<HTMLFormElement|null>(null)
+  const formRef = useRef<HTMLFormElement|null>(null);
+  const { objects = [], lastPageNum = 0 } = fetcher.data || {};
 
-  const base = useMemo(() => {
-    return { fetcher, setIsLoading, actionPath, ref: formRef }
-  }, [fetcher, setIsLoading, actionPath]);
-
-  useEffect(() => {
-    const { data } = fetcher;
-    if ( data ) {
-      setIsLoading(false);
-      try {
-        const { objects, pageNum, pageSize, lastPageNum } = data;
-        if ([Array.isArray(objects), typeof pageNum === 'number', typeof pageSize === 'number', typeof lastPageNum === 'number'].includes(false)) {
-          throw new Error();
-        }
-        setObjects(objects);
-        setLastPageNum(lastPageNum);
-      } catch(error) {
-        console.error("Invalid Format")
+  const execSubmit = useCallback((newPageData?: {pageNum: number, pageSize: number}) => {
+    if (formRef.current) {
+      if (fetcher.state === 'idle') {
+        const formData = formRef.current ? new FormData(formRef.current) : new FormData();
+        const { pageNum, pageSize } = newPageData? newPageData : {pageNum: 1, pageSize: pageDataState[0].pageSize};
+        formData.set('pageNum', pageNum.toString());
+        formData.set('pageSize', pageSize.toString());
+        console.log(Object.fromEntries(formData))
+        fetcher.submit(formData, { method: 'get', action: actionPath });
       }
     }
-  }, [fetcher.data]);
+  }, [actionPath, fetcher, formRef, pageDataState]);
+
+  const formBaseContext = useMemo(() => {
+    return { afterSubmit: execSubmit, fetcher, ref: formRef }
+  }, [execSubmit, fetcher, formRef]);
+
+  const controllerContext = useMemo(() => {
+    return { fetcher, state: pageDataState, submit: execSubmit };
+  }, [execSubmit, fetcher, pageDataState]);
+
+  useEffect(() => {
+    execSubmit();
+  }, []);
 
   return (
     <>
-      <FormBaseContext value={base}>
-        <PageDataContext value={pageDataState[0]}>
-          {children}
-        </PageDataContext>
+      <FormBaseContext value={formBaseContext}>
+        {children}
       </FormBaseContext>
-      <PageDataStateContext value={pageDataState} >
-        <Controller.Component lastPageNum={lastPageNum} isTop={true} />
-      </PageDataStateContext>
-      <Table columnDefinitions={columnDefinitions} toKey={toKey} selectedKeys={selectedKeys} isLoading={isLoading} objects={objects} />
-      <PageDataStateContext value={pageDataState} >
-        <Controller.Component lastPageNum={lastPageNum} isTop={false} />
-      </PageDataStateContext>
+      {!isHideController && <ControllerContext value={controllerContext} >
+        <Controller.Component lastPageNum={lastPageNum} />
+      </ControllerContext>}
+      <Table columnDefinitions={columnDefinitions} toKey={toKey} selectedKeys={selectedKeys} objects={objects} isLoading={fetcher.state !== 'idle'} />
+      {!isHideController && <ControllerContext value={controllerContext} >
+        <Controller.Component lastPageNum={lastPageNum} />
+      </ControllerContext>}
     </>
   );
 }
