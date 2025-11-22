@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, SetStateAction, Ref } from 'react';
 import { type FetcherWithComponents } from 'react-router';
 
 
@@ -7,6 +7,7 @@ type FormBaseContextType = {
   fetcher: FetcherWithComponents<unknown>;
   setIsLoading: Dispatch<SetStateAction<boolean>>;
   actionPath: string;
+  ref: Ref<HTMLFormElement|null>;
 } | undefined;
 export const FormBaseContext = createContext<FormBaseContextType>(undefined);
 export function useFormBaseContext() {

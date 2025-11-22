@@ -27,6 +27,7 @@ export function useFormState() {
 }
 
 type Props<ResponseDataType> = {
+  ref?: React.Ref<HTMLFormElement|null>;
   children?: React.ReactNode;
   fetcher?: FetcherWithComponents<ResponseDataType>;
   method?: HTMLFormMethod;
@@ -41,22 +42,22 @@ type FormWithValidationProps<ResponseDataType> = Props<ResponseDataType> & {
   onSubmit?: (event: React.FormEvent<HTMLFormElement>, formDataRecord: Record<string, string>) => void;
 }
 
-function Form<ResponseDataType = unknown>({ children, fetcher, onSubmit, method, actionPath }: FormProps<ResponseDataType>): React.ReactElement<FormProps<ResponseDataType>> {
+function Form<ResponseDataType = unknown>({ ref, children, fetcher, onSubmit, method, actionPath }: FormProps<ResponseDataType>): React.ReactElement<FormProps<ResponseDataType>> {
   if ( fetcher ) {
     return (
-      <fetcher.Form method={method} action={actionPath} onSubmit={onSubmit}>
+      <fetcher.Form ref={ref} method={method} action={actionPath} onSubmit={onSubmit}>
         {children}
       </fetcher.Form>
     )
   }
   return (
-    <form method={method} action={actionPath} onSubmit={onSubmit}>
+    <form ref={ref} method={method} action={actionPath} onSubmit={onSubmit}>
       {children}
     </form>
   )
 }
 
-export function FormWithValidation<ResponseDataType = unknown>({ children, fetcher, onSubmit, method, actionPath }: FormWithValidationProps<ResponseDataType>): React.ReactElement<FormWithValidationProps<ResponseDataType>> {
+export function FormWithValidation<ResponseDataType = unknown>({ ref, children, fetcher, onSubmit, method, actionPath }: FormWithValidationProps<ResponseDataType>): React.ReactElement<FormWithValidationProps<ResponseDataType>> {
   const submit = useSubmit();
 
   const [didTapSubmit, setDidTapSubmit] = React.useState(false);
@@ -133,7 +134,7 @@ export function FormWithValidation<ResponseDataType = unknown>({ children, fetch
   }, [didPass, currentEvent, runSubmitLogic]);
 
   return (
-    <Form onSubmit={localOnSubmit} fetcher={fetcher} method={method} actionPath={actionPath}>
+    <Form ref={ref} onSubmit={localOnSubmit} fetcher={fetcher} method={method} actionPath={actionPath}>
       {/* 4. 2つの Context Provider でラップ */}
       {/* set は不変なので、これが原因で子は再レンダリングされない */}
       <FormDispatchContext value={dispatchContext}>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Table, type TableColumnDefinitions } from "../Table";
 import { useFetcher } from 'react-router';
 
@@ -25,9 +25,10 @@ export function PaginatedTable<ObjectType>({actionPath, columnDefinitions, toKey
   const [objects, setObjects] = useState<ObjectType[]>([]);
   const pageDataState = useState<{pageNum: number, pageSize: number}>({pageNum: 1, pageSize: 10});
   const [lastPageNum, setLastPageNum] = useState(0);
+  const formRef = useRef<HTMLFormElement|null>(null)
 
   const base = useMemo(() => {
-    return { fetcher, setIsLoading, actionPath }
+    return { fetcher, setIsLoading, actionPath, ref: formRef }
   }, [fetcher, setIsLoading, actionPath]);
 
   useEffect(() => {
