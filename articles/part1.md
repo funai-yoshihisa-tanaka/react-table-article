@@ -2,9 +2,9 @@
 
 本記事は3部作のPart 1です。
 
-* Part 1
-* [Part 2](https://qiita.com/yoshihisa_tanaka/private/e2ff43e1488dcb43cd18)
-* [Part 3]()
+* Part 1: フォームバリデーション（本記事）
+* [Part 2: 汎用テーブルコンポーネント](https://qiita.com/yoshihisa_tanaka/private/e2ff43e1488dcb43cd18)
+* [Part 3: 検索とページネーションの統合](https://qiita.com/yoshihisa_tanaka/items/7d6b4d69b0424d77a00a)
 
 [コード全体はこちら](https://github.com/funai-yoshihisa-tanaka/react-table-article)（3部作全体です。）
 
@@ -18,7 +18,9 @@ React Router でフォームを扱う際、クライアントサイドの高度�
 ## アーキテクチャとディレクトリ構造
 
 このシステムの核心は、責務の明確な分離にあります。
-```
+
+```txt
+app/
 ├── components/
 │ ├── ValidatedForm/
 │ │ ├── Input/
@@ -30,27 +32,34 @@ React Router でフォームを扱う際、クライアントサイドの高度�
 │ │ ├── Form.tsx
 │ │ └── index.tsx
 │ └── ValidationMessages.tsx
-└── App.tsx
+└── routes/
+  └── form.tsx
 ```
+
 各ファイルの役割は明確に分離されています。
 
-### 1. Form.tsx (フォームコンテキストと送信制御):
+### 1. Form.tsx (フォームコンテキストと送信制御)
+
 フォーム全体の「状態」と「更新関数」を管理する司令塔です。
-`Context` を通じて、子コンポーネントに「送信が押されたか」( `FormStateContext` )、バリデーション結果や各種関数を登録するための「更新関数群」( `FormDispatchContext` )、「リセット関数」( `FormClearContext` ) を提供します。 
+`Context` を通じて、子コンポーネントに「送信が押されたか」( `FormStateContext` )、バリデーション結果や各種関数を登録するための「更新関数群」( `FormDispatchContext` )、「リセット関数」( `FormClearContext` ) を提供します。
 そして最も重要な役割として、 `onSubmit` を制御し、バリデーション通過後に `useSubmit` または `fetcher` を使って `React Router` の `action` にデータを送信します。
 
-### 2. InputBase.tsx (共通入力ロジック):
+### 2. InputBase.tsx (共通入力ロジック)
+
 すべての入力コンポーネントの基盤です。 `onBlur` や「送信」シグナルでバリデーションを実行し、 `FormDispatchContext` 経由で結果を親に報告します。
 
-### 3. ClearButton.tsx (リセットトリガー):
+### 3. ClearButton.tsx (リセットトリガー)
+
 `FormClearContext` から「リセット関数」を受け取り、 `onClick` で実行するだけのシンプルなコンポーネントです。
 
-### 4. `EmailInput.tsx` / `PhoneNumberInput.tsx` (具象コンポーネント):
+### 4. `EmailInput.tsx` / `PhoneNumberInput.tsx` (具象コンポーネント)
+
 `InputBase` をラップし、特定の入力タイプに必要なスキーマ（ `zod` ）や、 `beforeValidate` （バリデーション前の値整形）関数を渡す「薄い」コンポーネントです。
 
 ## 主要コンポーネントの詳細
 
-### 1. src/components/ValidatedForm/Form.tsx - フォームの「司令塔」
+### 1. app/components/ValidatedForm/Form.tsx - フォームの「司令塔」
+
 `Form` コンポーネントは、バリデーションの状態収集、リセット機能の提供、そして `React Router` へのデータ送信という3つの主要な責務を持ちます。
 
 ```typescript:Form.tsx
@@ -144,20 +153,24 @@ export function FormWithValidation<ResponseDataType = unknown>({ children, fetch
 
 このコンポーネントの設計は、前記事 で解説されているパフォーマンス（ `Context` 分離、 `useRef` ）への配慮に加え、 `React Router` との連携が鍵となります。
 
-#### 1. `onSubmit` の乗っ取り:
+#### 1. `onSubmit` の乗っ取り
+
 `localOnSubmit` で `event.preventDefault()` を呼び出し、ブラウザによるネイティブなフォーム送信を 常に 停止させます。これにより、クライアントサイドでのバリデーションロジックを確実に実行する時間を確保します。
 
-#### 2. 遅延送信:
+#### 2. 遅延送信
+
 ユーザーが送信ボタンを押した時点（ `localOnSubmit` ）でバリデーション（ `didPass` ）が通っていない場合、送信イベント（ `event` ）を `currentEvent` に一時保存します。
 
-#### 3. useEffect による監視:
+#### 3. useEffect による監視
+
 `InputBase` コンポーネント群での入力とバリデーションが進み、全フィールドのバリデーションが通過すると `didPass` が `true` になります。 `useEffect` がこれを検知し、保存されていた `currentEvent` を使って `runSubmitLogic` を実行します。
 
-#### 4. React Router への送信:
+#### 4. React Router への送信
+
 `runSubmitLogic` が、このシステムの核心です。 `fetcher` が `props` として渡されていれば `fetcher.submit()` を、そうでなければ `useSubmit()` を呼び出します。
 どちらも、 `React Router` が管理する `action` 関数に対して、プログラム的にデータを送信するための公式な方法です。
 
-### 2. src/components/ValidatedForm/Input/InputBase.tsx - 高機能な「実行役」
+### 2. app/components/ValidatedForm/Input/InputBase.tsx - 高機能な「実行役」
 
 `InputBase` の設計は、前記事 で解説されているものと同一です。 `Form` コンポーネント（親）が `React Router` との通信をすべて担当するため、 `InputBase` 自身は `React Router` を意識する必要がありません。
 
@@ -174,10 +187,11 @@ export function FormWithValidation<ResponseDataType = unknown>({ children, fetch
 
 最も重要なのは、 `type="button"` を明示的に指定している点です。もし `type="reset"` を使用すると、 `React` の `State` 更新と `HTML` ネイティブの `reset` 動作が競合し、 `React` の `State` と DOM の値が不整合を起こすバグの原因となります。 `type="button"` にすることで、状態管理を 100% `React` の制御下に置くことができます。
 
-## 実際の使用例 (src/App.tsx)
+## 実際の使用例 (app/routes/form.tsx)
+
 `React Router` 環境で、この `FormWithValidation` を使用する例です。ルート遷移を伴う通常の `action` 送信と、 `Fetcher` を使った非同期送信の両方に対応できます。
 
-```typescript:App.tsx
+```typescript:form.tsx
 import { useState } from 'react';
 import { useFetcher } from 'react-router-dom'; // useFetcher をインポート
 import { FormWithValidation, EmailInput, PhoneNumberInput, ClearButton } from './components/ValidatedForm'

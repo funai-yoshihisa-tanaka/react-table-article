@@ -2,9 +2,9 @@
 
 本記事は3部作のPart 1です。
 
-* [Part 1](https://qiita.com/yoshihisa_tanaka/private/74e095f569e42e03cdf1)
-* Part 2
-* [Part 3]()
+* [Part 1: フォームバリデーション](https://qiita.com/yoshihisa_tanaka/private/74e095f569e42e03cdf1)
+* Part 2: 汎用テーブルコンポーネント（本記事）
+* [Part 3: 検索とページネーションの統合](https://qiita.com/yoshihisa_tanaka/items/7d6b4d69b0424d77a00a)
 
 [コード全体はこちら](https://github.com/funai-yoshihisa-tanaka/react-table-article)（3部作全体です。）
 
@@ -23,7 +23,17 @@
 
 この記事では、そのコンポーネントの「使い方（API）」と「実装のポイント」を紹介します。
 
----
+## ディレクトリ構造
+
+```txt
+app/
+├── components/
+│ └── Table/
+│   ├── index.tsx
+│   └── Table.tsx
+└── routes/
+  └── table.tsx
+```
 
 ## このコンポーネントの使い方 (API)
 
@@ -155,9 +165,11 @@ type TableColumnDefinition<ObjectType> = {
 ```
 
 当初、Tailwind CSSを使っていたので
+
 ```tsx
 className={`w-[${widthRem}rem]`}
 ```
+
 のように動的にクラスを生成しようとしました。
 しかし、 **Tailwindはビルド時にソースコードをスキャンしてCSSを生成する** ため、実行時に動的に生成されるクラス文字列（例: `w-[10rem]`）はCSSとして出力されず、スタイルが適用されません。
 
@@ -169,9 +181,9 @@ className={`w-[${widthRem}rem]`}
 
 `<tbody>` の内部を、propsの状態に応じて3パターンで描画しています。
 
-1.  `isLoading={true}` の場合 → `LoadingSpinner` を表示
-2.  `isLoading={false}` かつ `objects.length === 0` の場合 → "No Data" を表示
-3.  上記以外 → `objects.map(...)` でデータを描画
+1. `isLoading={true}` の場合 → `LoadingSpinner` を表示
+2. `isLoading={false}` かつ `objects.length === 0` の場合 → "No Data" を表示
+3. 上記以外 → `objects.map(...)` でデータを描画
 
 これにより、テーブルの利用側は `isLoading` と `objects` を渡すだけで、面倒な分岐処理を書く必要がなくなります。
 
