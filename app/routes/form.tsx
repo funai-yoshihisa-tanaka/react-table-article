@@ -2,9 +2,7 @@ import { useEffect, useState } from 'react';
 import { useFetcher, type ActionFunctionArgs } from 'react-router';
 import { FormWithValidation, EmailInput, PhoneNumberInput, ClearButton } from '@/components/ValidatedForm'
 
-export async function action({ request }: ActionFunctionArgs) {
-  const formData = await request.formData();
-  console.log(Object.fromEntries(formData));
+export async function action({}: ActionFunctionArgs) {
   return {};
 }
 

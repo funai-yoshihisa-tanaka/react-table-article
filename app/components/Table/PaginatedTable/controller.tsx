@@ -85,25 +85,27 @@ export function Component({ lastPageNum }: ComponentProps) {
     }
     setPageData(prev => {
       const { pageNum: currentNum, pageSize: currentSize } = prev;
-      const newNum = Math.ceil((currentNum - 1) * currentSize + 1 / newSize)
+      const newNum = Math.ceil(((currentNum - 1) * currentSize + 1) / newSize);
       const newValue = { pageNum: newNum, pageSize: newSize };
       submit(newValue);
       return newValue;
     });
   }, [setPageData, fetcher]);
 
+  const { pageNum, pageSize } = pageData;
+
   return (
     <div className="grid grid-cols-6 gap-2">
       <div>
-        <SelectPageSize onChange={setPageSize} currentSize={pageData.pageSize} />
+        <SelectPageSize onChange={setPageSize} currentSize={pageSize} />
       </div>
       <div className="col-span-4 flex justify-center items-center">
         {diffs.map((diff) => {
-          return <PaginationButton key={diff} currentNum={pageData.pageNum} diff={diff} lastPageNum={lastPageNum} setPageNum={setPageNum} />
+          return <PaginationButton key={diff} currentNum={pageNum} diff={diff} lastPageNum={lastPageNum} setPageNum={setPageNum} />
         })}
       </div>
       <div className="text-right pr-2">
-        {lastPageNum === 0 ? 'None' : `${pageData.pageNum} / ${lastPageNum}`}
+        {lastPageNum === 0 ? 'None' : `${pageNum} / ${lastPageNum}`}
       </div>
     </div>
   );

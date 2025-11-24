@@ -25,17 +25,24 @@ export function PaginatedTable<ObjectType>({actionPath, isHideController, column
   const fetcher = useFetcher<{ objects: ObjectType[], pageNum: number, pageSize: number, lastPageNum: number }>();
   const pageDataState = useState<{pageNum: number, pageSize: number}>({pageNum: 1, pageSize: 10});
   const formRef = useRef<HTMLFormElement|null>(null);
-  const { objects = [], lastPageNum = 0 } = fetcher.data || {};
+  const { objects = [], lastPageNum = 0, pageNum } = fetcher.data || {};
 
   const execSubmit = useCallback((newPageData?: {pageNum: number, pageSize: number}) => {
     if (formRef.current) {
       if (fetcher.state === 'idle') {
         const formData = formRef.current ? new FormData(formRef.current) : new FormData();
-        const { pageNum, pageSize } = newPageData? newPageData : {pageNum: 1, pageSize: pageDataState[0].pageSize};
-        formData.set('pageNum', pageNum.toString());
-        formData.set('pageSize', pageSize.toString());
-        console.log(Object.fromEntries(formData))
-        fetcher.submit(formData, { method: 'get', action: actionPath });
+        if ( newPageData ) {
+          formData.set('pageNum', newPageData.pageNum.toString());
+          formData.set('pageSize', newPageData.pageSize.toString());
+        } else {
+          pageDataState[1](prev => {
+            const newPageData = { pageNum: 1, pageSize: prev.pageSize };
+            formData.set('pageNum', newPageData.pageNum.toString());
+            formData.set('pageSize', newPageData.pageSize.toString());
+            return newPageData;
+          });
+        }
+        void fetcher.submit(formData, { method: 'get', action: actionPath });
       }
     }
   }, [actionPath, fetcher, formRef, pageDataState]);
@@ -51,6 +58,12 @@ export function PaginatedTable<ObjectType>({actionPath, isHideController, column
   useEffect(() => {
     execSubmit();
   }, []);
+
+  useEffect(() => {
+    if ( pageNum !== undefined ) {
+      pageDataState[1](prev => prev.pageNum === pageNum ? prev : { pageNum, pageSize: prev.pageSize});
+    }
+  }, [pageDataState, pageNum]);
 
   return (
     <>
