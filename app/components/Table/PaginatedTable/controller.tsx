@@ -31,7 +31,6 @@ function PaginationButtonBase({ onClick, children, className='' }: {onClick?: (n
 }
 
 type PaginationButtonProps = {
-  key: number;
   currentNum: number;
   diff: number;
   lastPageNum: number;

@@ -14,7 +14,7 @@ export function CriteriaForm({ children }: CriteriaFormProps) {
   const { afterSubmit, fetcher, ref } = baseContext;
 
   return (
-    <FormWithValidation ref={ref} fetcher={fetcher} onSubmit={() => {afterSubmit()}}>
+    <FormWithValidation ref={ref} fetcher={fetcher} method="get" onSubmit={() => {afterSubmit()}}>
       {children}
     </FormWithValidation>
   );

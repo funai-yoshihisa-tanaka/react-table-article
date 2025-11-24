@@ -18,5 +18,5 @@ export async function loader({ request }: LoaderFunctionArgs) {
       text: `text${i}`,
     });
   }
-  return { objects, pageNum, pageSize, lastPageNum: 1000 / pageSize };
+  return { objects, pageNum, pageSize, lastPageNum: Math.ceil(1000 / pageSize) };
 }
